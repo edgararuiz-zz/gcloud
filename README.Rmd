@@ -1,0 +1,120 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+library(gcloud)
+new_server <- "r-snyhepwjps"
+```
+# gcloud
+
+This package provides a light wrapper to Google's *gcloud* CLI.  It currently focuses on automating the creation and setup of VM instances.
+
+## Installation
+
+The Google SDK needs to be installed prior use of this package: https://cloud.google.com/sdk/install
+
+``` r
+devtools::install_github("edgararuiz/gcloud")
+```
+
+## Basics
+
+Use `gcloud_shell()` to run standard commands against your current Google Cloud project.  The function automatically prefixes *gcloud* to the command. 
+
+```{r}
+library(gcloud)
+
+gcloud_shell("compute instances list")
+```
+
+`gcloud_to_tibble()` parses some of the CLI's output into tibbles. It automatically detects the location and length of each column.
+
+```{r}
+gcloud_to_tibble("compute instances list")
+```
+
+Higher level wrappers are available as well, such as `gcloud_instances()`, `gcloud_images()` and `gcloud_machine_types()`.
+
+```{r}
+gcloud_instances()
+```
+
+To see the current configuration settings for your user use `gcloud_config()`.
+
+```{r}
+gcloud_config()
+```
+
+## Server creation and configuration
+
+A new server VM instance can be created using `gcloud_new_instance()`.  The function contains enough default arguments that allows the creation of a 8 CPU server with Ubuntu 18.04 by just calling the function.
+
+```{r, eval = FALSE}
+new_server <- gcloud_new_instance()
+```
+
+
+Once created, it is easy to interact with the new server using 
+
+```{r}
+gcloud_run("ls /home", server_name = new_server)
+```
+
+Another way to interact and configure the server is to copy and run a bash file. This package comes with an example shell file.
+
+```{r}
+script <- system.file("shell/revdep.sh", package = "gcloud")
+
+head(readLines(script, encoding = "UTF-8"), 12)
+```
+
+The `revdep.sh` shell file will do the following:
+
+- Installs Linux dependencies, including Java
+- Install the preview version of RStudio Server Open Source
+- Builds R from source
+- Creates a user named `rstudio` and sets the password to `rstudio`
+- Pre installs `devtools` and `revdepcheck`
+
+Use `gcloud_sh_run()` to run the shell file.  It will copy and execute the script for you.
+
+```{r, eval = FALSE}
+gcloud_sh_run(script, server_name = new_server)
+```
+
+## Full example
+
+```{r, eval = FALSE}
+repo <- "edgararuiz/modeldb"
+# Create a new instance
+new_server <- gcloud_new_instance()
+Sys.sleep(30)
+# Copy and run the shell script
+gcloud_sh_run(
+  system.file("shell/revdep.sh", package = "gcloud"), 
+  server_name = new_server)
+# Clone the repo, under the rstudio user
+gcloud_run(
+  paste0("git clone https://github.com/", repo,".git"), 
+  new_server, 
+  "rstudio")
+# Open the RStudio port access
+gcloud_shell(
+  "compute firewall-rules create rstudio --rules tcp:8787 --action allow"
+  )
+# Get the instance list in order to get the external IP
+instances <- gcloud_instances()
+ext_ip <- instances$EXTERNAL_IP[instances$NAME == new_server]
+# Automatically navigate to the RStudio UI
+browseURL(paste0("http://", ext_ip, ":8787")) 
+```
+
